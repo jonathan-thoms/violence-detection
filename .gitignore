@@ -25,6 +25,7 @@ models/*.pt
 # Intermediate / temp files
 .tmp/
 *.log
+datasets/
 
 # OS
 Thumbs.db

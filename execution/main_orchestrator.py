@@ -104,14 +104,24 @@ def face_worker(gatekeeper: FaceGatekeeper) -> None:
 
     print("[FaceWorker] Webcam opened in background thread.")
 
+    last_check_time = 0.0
+
     while not _shutdown_event.is_set():
         ret, frame = cap.read()
         if not ret:
+            time.sleep(0.01)
             continue
 
-        small = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
-        match, _ = gatekeeper.is_target_present(small)
-        TARGET_PRESENT = match
+        # THROTTLE: If user is already active, only verify them every 3 seconds.
+        # If missing, check every 0.5 seconds to wake up fast.
+        check_int = 3.0 if TARGET_PRESENT else 0.5
+        
+        curr_time = time.time()
+        if curr_time - last_check_time > check_int:
+            small = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+            match, _ = gatekeeper.is_target_present(small)
+            TARGET_PRESENT = match
+            last_check_time = curr_time
 
     cap.release()
     print("[FaceWorker] Webcam released. Thread exiting.")
@@ -176,7 +186,11 @@ class CaptureWorker(QThread):
         # Added 'person' and 'cell phone' just so you can test the blurring works immediately!
         blur_keywords = ['violence', 'knife', 'gun', 'weapon', 'pistol', 'rifle', 'person', 'cell phone']
         for cls_id, cls_name in violence_filter.model.names.items():
-            if any(kw in cls_name.lower() for kw in blur_keywords):
+            name_lower = cls_name.lower()
+            # Explicitly ignore 'nonviolence' or 'safe' classes so they don't get matched by 'violence' keyword
+            if "non" in name_lower or "safe" in name_lower:
+                continue
+            if any(kw in name_lower for kw in blur_keywords):
                 target_classes.append(cls_id)
                 
         if target_classes:
@@ -205,9 +219,11 @@ class CaptureWorker(QThread):
                         continue
                     for box in result.boxes:
                         conf = float(box.conf[0])
-                        if conf < 0.30:  # Lowered so knives/phones are detected easier
-                            continue
                         cls_id = int(box.cls[0])
+                        
+                        if conf < 0.15:  # Lowered so knives/phones are detected easier
+                            continue
+                        
                         # Filter based on dynamic target classes
                         if target_classes and cls_id not in target_classes:
                             continue
@@ -246,10 +262,9 @@ def main() -> None:
     if not os.path.isabs(target_face_path):
         target_face_path = os.path.join(_PROJECT_ROOT, target_face_path)
 
-    model_path = os.getenv(
-        "YOLO_MODEL_PATH",
-        os.path.join(_PROJECT_ROOT, "models", "violence_best.pt"),
-    )
+    model_path = os.getenv("YOLO_MODEL_PATH", "models/violence_best.pt")
+    if not os.path.isabs(model_path):
+        model_path = os.path.join(_PROJECT_ROOT, model_path)
 
     # ---- Print banner ----
     print("=" * 60)

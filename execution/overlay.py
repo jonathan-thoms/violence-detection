@@ -112,7 +112,10 @@ class CaptureWorker(QThread):
         target_classes = []
         blur_keywords = ['violence', 'knife', 'gun', 'weapon', 'pistol', 'rifle', 'person', 'cell phone']
         for cls_id, cls_name in violence_filter.model.names.items():
-            if any(kw in cls_name.lower() for kw in blur_keywords):
+            name_lower = cls_name.lower()
+            if "non" in name_lower or "safe" in name_lower:
+                continue
+            if any(kw in name_lower for kw in blur_keywords):
                 target_classes.append(cls_id)
                 
         if target_classes:
@@ -140,9 +143,11 @@ class CaptureWorker(QThread):
                     continue
                 for box in result.boxes:
                     conf = float(box.conf[0])
-                    if conf < 0.30:
-                        continue
                     cls_id = int(box.cls[0])
+                    
+                    if conf < 0.15: # Lowered from 0.30 to catch everything
+                        continue
+                        
                     if target_classes and cls_id not in target_classes:
                         continue
                     x1, y1, x2, y2 = box.xyxy[0]
@@ -318,10 +323,9 @@ def main():
     
     from dotenv import load_dotenv
     load_dotenv(dotenv_path=os.path.join(_PROJECT_ROOT, ".env"))
-    model_path = os.getenv(
-        "YOLO_MODEL_PATH",
-        os.path.join(_PROJECT_ROOT, "models", "violence_best.pt"),
-    )
+    model_path = os.getenv("YOLO_MODEL_PATH", "models/violence_best.pt")
+    if not os.path.isabs(model_path):
+        model_path = os.path.join(_PROJECT_ROOT, model_path)
     
     worker = CaptureWorker(model_path=model_path)
     worker.data_ready.connect(overlay.update_data)
