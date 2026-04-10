@@ -258,9 +258,8 @@ def main() -> None:
     # ---- Load .env ----
     load_dotenv(dotenv_path=os.path.join(_PROJECT_ROOT, ".env"))
 
-    target_face_path = os.getenv("TARGET_FACE_PATH", "data/test_target.jpeg")
-    if not os.path.isabs(target_face_path):
-        target_face_path = os.path.join(_PROJECT_ROOT, target_face_path)
+    # Use faces directory for multi-face support
+    faces_dir = os.path.join(_PROJECT_ROOT, "data", "faces")
 
     model_path = os.getenv("YOLO_MODEL_PATH", "models/violence_best.pt")
     if not os.path.isabs(model_path):
@@ -274,8 +273,8 @@ def main() -> None:
     print("         To exit, press Ctrl+C in this console.")
     print("=" * 60)
 
-    # ---- Instantiate face gatekeeper ----
-    gatekeeper = FaceGatekeeper(target_face_path)
+    # ---- Instantiate face gatekeeper (multi-face) ----
+    gatekeeper = FaceGatekeeper(faces_dir=faces_dir)
 
     # ---- Launch face gatekeeper in a daemon thread ----
     face_thread = threading.Thread(
